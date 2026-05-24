@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                     String                  @id @default(cuid())
+  name                   String
+  email                  String                  @unique
+  passwordHash           String
+  emailVerifiedAt        DateTime?
+  sessions               Session[]
+  memberships            WorkspaceMember[]
+  emailVerificationCodes EmailVerificationCode[]
+  passwordResetTokens    PasswordResetToken[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+}
+
+model EmailVerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Workspace {
+  id          String            @id @default(cuid())
+  name        String
+  plan        String            @default("free")
+  members     WorkspaceMember[]
+  projects    Project[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String    @default("owner")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+  description String?
+  environment String    @default("production")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts       Post[]
+  media       Media[]
+  apiKeys     ApiKey[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model Post {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  slug             String
+  excerpt          String?
+  content          String    @default("")
+  status           String    @default("draft")
+  category         String?
+  authorName       String?
+  authorProfilePic String?
+  readTimeMinutes  Int       @default(1)
+  tagsJson         String    @default("[]")
+  thumbnailMediaId String?
+  seoTitle         String?
+  seoDescription   String?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@unique([projectId, slug])
+  @@index([projectId, status])
+}
+
+model Media {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  postId    String?
+  usage     String
+  url       String
+  path      String
+  alt       String?
+  bytes     Int       @default(0)
+  width     Int?
+  height    Int?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@index([projectId])
+  @@index([postId])
+}
+
+model ApiKey {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  prefix       String    @unique
+  hashedSecret String
+  environment  String
+  scopesJson   String    @default("[]")
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([projectId])
+}
+
+model ApiRequestLog {
+  id        String   @id @default(cuid())
+  apiKeyId  String?
+  projectId String
+  method    String
+  path      String
+  status    Int
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([apiKeyId])
+}

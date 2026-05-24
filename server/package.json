@@ -1,0 +1,38 @@
+{
+  "name": "laughingwaffle-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:setup": "tsx src/scripts/setup-database.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate:prod": "prisma generate --schema=./prisma/schema.production.prisma",
+    "db:push:prod": "prisma db push --schema=./prisma/schema.production.prisma",
+    "db:migrate:prod": "prisma migrate deploy --schema=./prisma/schema.production.prisma",
+    "db:rls": "tsx src/scripts/enable-rls.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.8.2",
+    "@types/multer": "^2.1.0",
+    "bcryptjs": "3.0.2",
+    "cookie-parser": "1.4.7",
+    "cors": "2.8.5",
+    "dotenv": "16.5.0",
+    "express": "5.1.0",
+    "multer": "^2.1.1",
+    "zod": "3.25.28"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "1.4.8",
+    "@types/cors": "2.8.18",
+    "@types/express": "5.0.2",
+    "@types/node": "22.15.30",
+    "prisma": "6.8.2",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3"
+  }
+}
