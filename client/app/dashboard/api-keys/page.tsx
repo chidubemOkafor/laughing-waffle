@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getProjectApiBase, useProjects } from "@/components/dashboard/project-context";
 import { API_URL } from "@/lib/api";
+import { cachedFetch, invalidateCache } from "@/lib/fetch-cache";
 
 type ApiKey = {
   id: string;
@@ -54,8 +55,9 @@ export default function ApiKeysPage() {
       setError("");
 
       try {
-        const response = await fetch(`${API_URL}/api/projects/${activeProject.id}/api-keys`, {
-          credentials: "include"
+        const response = await cachedFetch(`${API_URL}/api/projects/${activeProject.id}/api-keys`, {
+          credentials: "include",
+          ttl: 120_000
         });
         const data = await response.json().catch(() => null);
 
@@ -106,6 +108,8 @@ export default function ApiKeysPage() {
 
       setApiKeys((currentKeys) => currentKeys.filter((key) => key.id !== pendingRevokeKey.id));
       setPendingRevokeKey(null);
+      invalidateCache(`/api/projects/${activeProject.id}/api-keys`);
+      invalidateCache(`/api/projects/${activeProject.id}/dashboard`);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to revoke API key.");
     } finally {

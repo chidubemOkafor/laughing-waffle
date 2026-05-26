@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
 import { z } from "zod";
+import type { Project } from "@prisma/client";
 import { serializeProject } from "../auth/serialize.js";
 import { getSessionFromRequest } from "../auth/session.js";
 import { getBillingPeriodStart, normalizePlan, planLimits } from "../billing/plans.js";
@@ -166,14 +167,29 @@ function serializeApiKey(apiKey: {
   };
 }
 
-async function getWorkspaceProject(workspaceId: string, projectId: string) {
-  return prisma.project.findFirst({
-    where: {
-      id: projectId,
-      workspaceId,
-      deletedAt: null
-    }
+async function getProjectAccess(
+  session: NonNullable<Awaited<ReturnType<typeof getSessionFromRequest>>>,
+  projectId: string
+): Promise<{ project: Project; isOwner: boolean } | null> {
+  const workspace = getPrimaryWorkspace(session);
+
+  if (workspace) {
+    const ownedProject = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId: workspace.id, deletedAt: null }
+    });
+    if (ownedProject) return { project: ownedProject, isOwner: true };
+  }
+
+  const membership = await prisma.projectMember.findFirst({
+    where: { projectId, userId: session.user.id },
+    include: { project: true }
   });
+
+  if (membership && !membership.project.deletedAt) {
+    return { project: membership.project, isOwner: false };
+  }
+
+  return null;
 }
 
 async function generateUniqueApiKey(environment: string) {
@@ -295,17 +311,27 @@ projectsRouter.get("/", async (req, res) => {
     return sendError(res, 404, "No workspace found for this account.");
   }
 
-  const projects = await prisma.project.findMany({
-    where: {
-      workspaceId: workspace.id,
-      deletedAt: null
-    },
-    orderBy: { createdAt: "asc" }
-  });
+  const [ownedProjects, memberships] = await Promise.all([
+    prisma.project.findMany({
+      where: { workspaceId: workspace.id, deletedAt: null },
+      orderBy: { createdAt: "asc" }
+    }),
+    prisma.projectMember.findMany({
+      where: { userId: session.user.id },
+      include: { project: true }
+    })
+  ]);
+
+  const memberProjects = memberships
+    .filter((m) => !m.project.deletedAt && m.project.workspaceId !== workspace.id)
+    .map((m) => m.project);
 
   return res.json({
     workspaceId: workspace.id,
-    projects: projects.map(serializeProject)
+    projects: [
+      ...ownedProjects.map((p) => ({ ...serializeProject(p), isOwner: true })),
+      ...memberProjects.map((p) => ({ ...serializeProject(p), isOwner: false }))
+    ]
   });
 });
 
@@ -316,17 +342,13 @@ projectsRouter.get("/:projectId/dashboard", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, String(req.params.projectId));
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const parsed = dashboardQuerySchema.safeParse(req.query);
 
@@ -486,12 +508,13 @@ projectsRouter.get("/:projectId/usage", async (req, res) => {
     return sendError(res, 404, "No workspace found for this account.");
   }
 
-  const project = await getWorkspaceProject(workspace.id, String(req.params.projectId));
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
 
+  const { project } = access;
   const plan = normalizePlan(workspace.plan);
   const limits = planLimits[plan];
   const billingPeriodStart = getBillingPeriodStart();
@@ -561,17 +584,13 @@ projectsRouter.get("/:projectId/posts", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, String(req.params.projectId));
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const parsed = postsQuerySchema.safeParse(req.query);
 
@@ -645,17 +664,13 @@ projectsRouter.get("/:projectId/posts/:postId", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, String(req.params.projectId));
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const post = await prisma.post.findFirst({
     where: {
@@ -702,17 +717,13 @@ projectsRouter.post("/:projectId/posts", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, String(req.params.projectId));
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const parsed = createPostSchema.safeParse(req.body);
 
@@ -810,17 +821,13 @@ projectsRouter.patch("/:projectId/posts/:postId", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, req.params.projectId);
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const existingPost = await prisma.post.findFirst({
     where: {
@@ -901,17 +908,13 @@ projectsRouter.delete("/:projectId/posts/:postId", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, req.params.projectId);
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const post = await prisma.post.findFirst({
     where: {
@@ -940,17 +943,13 @@ projectsRouter.post("/:projectId/media", upload.single("file"), async (req, res)
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, String(req.params.projectId));
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, String(req.params.projectId));
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   if (!req.file) {
     return sendError(res, 400, "No image file uploaded.");
@@ -996,17 +995,13 @@ projectsRouter.get("/:projectId/api-keys", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, req.params.projectId);
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const apiKeys = await prisma.apiKey.findMany({
     where: {
@@ -1029,17 +1024,13 @@ projectsRouter.post("/:projectId/api-keys", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, req.params.projectId);
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  const { project } = access;
 
   const parsed = createApiKeySchema.safeParse(req.body);
 
@@ -1077,17 +1068,17 @@ projectsRouter.delete("/:projectId/api-keys/:apiKeyId", async (req, res) => {
     return sendError(res, 401, "Not authenticated.");
   }
 
-  const workspace = getPrimaryWorkspace(session);
+  const access = await getProjectAccess(session, req.params.projectId);
 
-  if (!workspace) {
-    return sendError(res, 404, "No workspace found for this account.");
-  }
-
-  const project = await getWorkspaceProject(workspace.id, req.params.projectId);
-
-  if (!project) {
+  if (!access) {
     return sendError(res, 404, "Project not found.");
   }
+
+  if (!access.isOwner) {
+    return sendError(res, 403, "Only project owners can revoke API keys.");
+  }
+
+  const { project } = access;
 
   const apiKey = await prisma.apiKey.findFirst({
     where: {
@@ -1153,4 +1144,154 @@ projectsRouter.post("/", async (req, res) => {
   return res.status(201).json({
     project: serializeProject(project)
   });
+});
+
+const addMemberSchema = z.object({
+  email: z.string().trim().email()
+});
+
+projectsRouter.get("/:projectId/members", async (req, res) => {
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
+    return sendError(res, 401, "Not authenticated.");
+  }
+
+  const access = await getProjectAccess(session, req.params.projectId);
+
+  if (!access) {
+    return sendError(res, 404, "Project not found.");
+  }
+
+  const members = await prisma.projectMember.findMany({
+    where: { projectId: access.project.id },
+    include: { user: true },
+    orderBy: { createdAt: "asc" }
+  });
+
+  return res.json({
+    project: serializeProject(access.project),
+    members: members.map((m) => ({
+      id: m.id,
+      userId: m.userId,
+      name: m.user.name,
+      email: m.user.email,
+      role: m.role,
+      createdAt: m.createdAt
+    }))
+  });
+});
+
+projectsRouter.post("/:projectId/members", async (req, res) => {
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
+    return sendError(res, 401, "Not authenticated.");
+  }
+
+  const access = await getProjectAccess(session, req.params.projectId);
+
+  if (!access) {
+    return sendError(res, 404, "Project not found.");
+  }
+
+  if (!access.isOwner) {
+    return sendError(res, 403, "Only project owners can add members.");
+  }
+
+  const parsed = addMemberSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error);
+  }
+
+  const { email } = parsed.data;
+  const targetUser = await prisma.user.findUnique({ where: { email } });
+
+  if (!targetUser) {
+    return sendError(res, 404, "No account found with that email address.");
+  }
+
+  if (targetUser.id === session.user.id) {
+    return sendError(res, 400, "You cannot add yourself as a member.");
+  }
+
+  const existing = await prisma.projectMember.findFirst({
+    where: { projectId: access.project.id, userId: targetUser.id }
+  });
+
+  if (existing) {
+    return sendError(res, 409, "This user is already a member of this project.");
+  }
+
+  const member = await prisma.projectMember.create({
+    data: { projectId: access.project.id, userId: targetUser.id, role: "editor" },
+    include: { user: true }
+  });
+
+  return res.status(201).json({
+    member: {
+      id: member.id,
+      userId: member.userId,
+      name: member.user.name,
+      email: member.user.email,
+      role: member.role,
+      createdAt: member.createdAt
+    }
+  });
+});
+
+projectsRouter.delete("/:projectId/members/:memberId", async (req, res) => {
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
+    return sendError(res, 401, "Not authenticated.");
+  }
+
+  const access = await getProjectAccess(session, req.params.projectId);
+
+  if (!access) {
+    return sendError(res, 404, "Project not found.");
+  }
+
+  if (!access.isOwner) {
+    return sendError(res, 403, "Only project owners can remove members.");
+  }
+
+  const member = await prisma.projectMember.findFirst({
+    where: { id: req.params.memberId, projectId: access.project.id }
+  });
+
+  if (!member) {
+    return sendError(res, 404, "Member not found.");
+  }
+
+  await prisma.projectMember.delete({ where: { id: member.id } });
+
+  return res.status(204).send();
+});
+
+projectsRouter.delete("/:projectId", async (req, res) => {
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
+    return sendError(res, 401, "Not authenticated.");
+  }
+
+  const access = await getProjectAccess(session, req.params.projectId);
+
+  if (!access) {
+    return sendError(res, 404, "Project not found.");
+  }
+
+  if (!access.isOwner) {
+    return sendError(res, 403, "Only project owners can delete a project.");
+  }
+
+  await prisma.project.update({
+    where: { id: access.project.id },
+    data: { deletedAt: new Date() }
+  });
+
+  return res.status(204).send();
 });

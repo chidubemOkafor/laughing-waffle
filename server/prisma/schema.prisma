@@ -18,6 +18,8 @@ model User {
   memberships            WorkspaceMember[]
   emailVerificationCodes EmailVerificationCode[]
   passwordResetTokens    PasswordResetToken[]
+  projectMemberships     ProjectMember[]
+  sentInvites            ProjectInvite[]         @relation("SentInvites")
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 }
@@ -83,22 +85,54 @@ model WorkspaceMember {
 }
 
 model Project {
-  id          String    @id @default(cuid())
-  workspaceId String
-  name        String
-  slug        String
-  description String?
-  environment String    @default("production")
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  posts       Post[]
-  media       Media[]
-  apiKeys     ApiKey[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id             String          @id @default(cuid())
+  workspaceId    String
+  name           String
+  slug           String
+  description    String?
+  environment    String          @default("production")
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts          Post[]
+  media          Media[]
+  apiKeys        ApiKey[]
+  projectMembers ProjectMember[]
+  invites        ProjectInvite[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      String   @default("editor")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+model ProjectInvite {
+  id          String    @id @default(cuid())
+  projectId   String
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedBy   User      @relation("SentInvites", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([email])
 }
 
 model Post {

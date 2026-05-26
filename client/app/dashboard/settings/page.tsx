@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProjectSettingsPanel } from "@/components/dashboard/project-settings-panel";
+import { ProjectMembersPanel } from "@/components/dashboard/project-members-panel";
 
 export default function SettingsPage() {
   return (
@@ -19,6 +20,7 @@ export default function SettingsPage() {
         </section>
 
         <ProjectSettingsPanel />
+        <ProjectMembersPanel />
       </div>
     </main>
   );

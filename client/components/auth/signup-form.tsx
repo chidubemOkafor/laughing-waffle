@@ -76,7 +76,7 @@ export function SignupForm() {
 
       posthog.capture("signed_up");
 
-      router.push("/dashboard");
+      router.push("/onboarding");
       router.refresh();
     } catch {
       setError("Unable to reach the backend. Make sure the server is running on port 4000.");

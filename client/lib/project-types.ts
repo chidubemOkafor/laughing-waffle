@@ -5,6 +5,7 @@ export type Project = {
   slug?: string;
   description: string | null;
   environment: string;
+  isOwner?: boolean;
   apiBase?: string;
   createdAt?: string;
   updatedAt?: string;

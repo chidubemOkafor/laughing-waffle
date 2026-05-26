@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { getProjectApiBase, useProjects } from "@/components/dashboard/project-context";
 import { API_URL } from "@/lib/api";
+import { cachedFetch } from "@/lib/fetch-cache";
 
 type DashboardRange = "7d" | "30d" | "all";
 type PostFilter = "all" | "published" | "draft" | "review" | "scheduled";
@@ -100,9 +101,9 @@ export default function DashboardPage() {
       setError("");
 
       try {
-        const response = await fetch(
+        const response = await cachedFetch(
           `${API_URL}/api/projects/${activeProject.id}/dashboard?range=${range}&status=${postFilter}`,
-          { credentials: "include" }
+          { credentials: "include", ttl: 60_000 }
         );
 
         const data = await response.json().catch(() => null);

@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
@@ -13,6 +13,7 @@ type ProjectContextValue = {
   projects: Project[];
   activeProject: Project;
   activeProjectId: string;
+  isOwner: boolean;
   loading: boolean;
   setActiveProjectId: (projectId: string) => void;
   refreshProjects: () => Promise<void>;
@@ -26,7 +27,7 @@ export function getProjectApiBase(project: Project) {
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectIdState] = useState("");
   const [loading, setLoading] = useState(true);
@@ -92,16 +93,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0] ?? currentProject;
+  const isOwner = activeProject?.isOwner !== false;
   const contextValue = {
     projects,
     activeProject,
     activeProjectId: projects.length > 0 ? activeProject.id : activeProjectId,
+    isOwner,
     loading,
     setActiveProjectId,
     refreshProjects
   };
-  const isCreateProjectRoute = pathname === "/dashboard/projects/new";
-
   if (loading) {
     return (
       <ProjectContext.Provider value={contextValue}>
@@ -115,34 +116,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (projects.length === 0 && !isCreateProjectRoute) {
-    return (
-      <ProjectContext.Provider value={contextValue}>
-        <div className="min-h-screen bg-paper px-4 py-6 text-ink sm:px-6 lg:px-8">
-          <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-3xl flex-col">
-            <div className="flex h-14 items-center">
-              <BrandLogo href="/dashboard" />
-            </div>
-            <main className="grid flex-1 place-items-center py-12">
-              <section className="w-full rounded-lg border border-cloud bg-white p-6 shadow-sm sm:p-8">
-                <p className="text-sm font-medium text-slate">No project yet</p>
-                <h1 className="mt-2 text-2xl font-semibold text-ink">Create your first project</h1>
-                <p className="mt-3 max-w-xl text-sm leading-6 text-slate">
-                  Projects hold your posts, media, API keys, and public endpoints. Create one before adding content or
-                  generating keys.
-                </p>
-                <Link
-                  href="/dashboard/projects/new"
-                  className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-coral px-4 text-sm font-semibold text-white transition hover:bg-[#ef5a49]"
-                >
-                  Create project
-                </Link>
-              </section>
-            </main>
-          </div>
-        </div>
-      </ProjectContext.Provider>
-    );
+  if (projects.length === 0) {
+    router.replace("/onboarding" as Route);
+    return null;
   }
 
   return <ProjectContext.Provider value={contextValue}>{children}</ProjectContext.Provider>;

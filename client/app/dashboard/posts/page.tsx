@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { useEffect, useState } from "react";
 import { useProjects } from "@/components/dashboard/project-context";
 import { API_URL } from "@/lib/api";
+import { cachedFetch, invalidateCache } from "@/lib/fetch-cache";
 
 type PostFilter = "all" | "published" | "draft" | "review" | "scheduled";
 
@@ -71,8 +72,9 @@ export default function PostsPage() {
           status,
           search
         });
-        const response = await fetch(`${API_URL}/api/projects/${activeProject.id}/posts?${params.toString()}`, {
-          credentials: "include"
+        const response = await cachedFetch(`${API_URL}/api/projects/${activeProject.id}/posts?${params.toString()}`, {
+          credentials: "include",
+          ttl: 30_000
         });
         const data = await response.json().catch(() => null);
 
@@ -122,6 +124,8 @@ export default function PostsPage() {
 
       setPosts((currentPosts) => currentPosts.filter((post) => post.id !== pendingDeletePost.id));
       setPendingDeletePost(null);
+      invalidateCache(`/api/projects/${activeProject.id}/posts`);
+      invalidateCache(`/api/projects/${activeProject.id}/dashboard`);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to delete post.");
     } finally {
