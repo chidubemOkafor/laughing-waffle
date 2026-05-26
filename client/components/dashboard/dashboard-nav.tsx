@@ -1,11 +1,15 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, FileText, Key, BookOpen, CreditCard, FolderPlus, Settings } from "lucide-react";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 
-const navSections = [
+type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavSection = { label: string; items: NavItem[] };
+
+const navSections: NavSection[] = [
   {
     label: "Content",
     items: [
@@ -28,11 +32,9 @@ const navSections = [
       { href: "/dashboard/settings", label: "Settings", icon: Settings }
     ]
   }
-] as const;
+];
 
-type NavHref = (typeof navSections)[number]["items"][number]["href"];
-
-function isActive(pathname: string, href: NavHref) {
+function isActive(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
   return pathname.startsWith(href);
 }
