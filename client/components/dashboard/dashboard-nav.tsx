@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -53,7 +54,7 @@ export function DashboardNav({ compact = false }: { compact?: boolean }) {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href as Route}
               className={[
                 "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition",
                 active ? "bg-ink text-white" : "text-slate hover:bg-cloud/60 hover:text-ink"
@@ -83,7 +84,7 @@ export function DashboardNav({ compact = false }: { compact?: boolean }) {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={item.href as Route}
                   className={[
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
                     active ? "bg-ink text-white" : "text-slate hover:bg-cloud/60 hover:text-ink"
