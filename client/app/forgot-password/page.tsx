@@ -6,7 +6,7 @@ import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 export default function ForgotPasswordPage() {
   return (
     <AuthShell>
-      <section className="rounded-xl border border-cloud bg-white/85 p-6 shadow-soft backdrop-blur">
+      <section className="rounded-xl border border-cloud bg-white/85 dark:bg-[#1a1d26]/90 p-6 shadow-soft backdrop-blur">
         <div className="mb-6">
           <BrandLogo size="md" />
           <h1 className="mt-6 text-2xl font-semibold text-ink">Reset your password</h1>

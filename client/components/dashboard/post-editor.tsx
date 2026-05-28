@@ -88,7 +88,7 @@ export function PostEditor({ content, onChange, onImageUpload, imageUploading }:
   const readTime = Math.max(1, Math.ceil(words / 200));
 
   return (
-    <div className="rounded-lg border border-cloud bg-white shadow-sm">
+    <div className="rounded-lg border border-cloud bg-white dark:bg-[#1a1d26] shadow-sm">
       <div className="flex flex-wrap items-center gap-2 border-b border-cloud px-4 py-3">
         <Btn active={editor?.isActive("heading", { level: 1 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}>H1</Btn>
         <Btn active={editor?.isActive("heading", { level: 2 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>H2</Btn>

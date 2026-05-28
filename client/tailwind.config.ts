@@ -12,9 +12,9 @@ const config: Config = {
       },
       colors: {
         ink: "#101318",
-        paper: "#F7F4EF",
-        slate: "#5C6675",
-        cloud: "#E5E7EB",
+        paper: "rgb(var(--color-paper) / <alpha-value>)",
+        slate: "rgb(var(--color-slate) / <alpha-value>)",
+        cloud: "rgb(var(--color-cloud) / <alpha-value>)",
         coral: "#FF6B5A",
         amber: "#F4B740",
         teal: "#23B8A9",
