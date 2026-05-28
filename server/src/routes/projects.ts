@@ -879,6 +879,38 @@ projectsRouter.patch("/:projectId/posts/:postId", async (req, res) => {
     return sendError(res, 400, "Scheduled posts need a publish date.");
   }
 
+  let thumbnailMediaId = existingPost.thumbnailMediaId;
+
+  if (parsed.data.thumbnailUrl !== undefined) {
+    if (!parsed.data.thumbnailUrl) {
+      thumbnailMediaId = null;
+    } else {
+      const existingThumb = thumbnailMediaId
+        ? await prisma.media.findFirst({ where: { id: thumbnailMediaId, deletedAt: null } })
+        : null;
+
+      if (existingThumb?.url !== parsed.data.thumbnailUrl) {
+        const thumb = await prisma.media.create({
+          data: {
+            projectId: project.id,
+            postId: existingPost.id,
+            usage: "thumbnail",
+            url: parsed.data.thumbnailUrl,
+            path: parsed.data.thumbnailUrl,
+            alt: parsed.data.thumbnailAlt || parsed.data.title || existingPost.title,
+            bytes: 0
+          }
+        });
+        thumbnailMediaId = thumb.id;
+      } else if (parsed.data.thumbnailAlt && existingThumb) {
+        await prisma.media.update({
+          where: { id: existingThumb.id },
+          data: { alt: parsed.data.thumbnailAlt }
+        });
+      }
+    }
+  }
+
   const post = await prisma.post.update({
     where: { id: existingPost.id },
     data: {
@@ -894,7 +926,8 @@ projectsRouter.patch("/:projectId/posts/:postId", async (req, res) => {
       tagsJson: parsed.data.tags ? JSON.stringify(parsed.data.tags) : undefined,
       seoTitle: parsed.data.seoTitle === undefined ? undefined : parsed.data.seoTitle || null,
       seoDescription: parsed.data.seoDescription === undefined ? undefined : parsed.data.seoDescription || null,
-      publishedAt
+      publishedAt,
+      thumbnailMediaId
     }
   });
 
