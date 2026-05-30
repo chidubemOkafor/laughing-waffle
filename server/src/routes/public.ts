@@ -159,7 +159,8 @@ publicRouter.get("/v1/projects/:projectSlug/posts", async (req, res) => {
       updatedAt: true,
       authorName: true,
       authorProfilePic: true,
-      readTimeMinutes: true
+      readTimeMinutes: true,
+      thumbnailMediaId: true
     },
     orderBy: { publishedAt: "desc" },
     skip,
@@ -169,25 +170,29 @@ publicRouter.get("/v1/projects/:projectSlug/posts", async (req, res) => {
     ? posts.filter((post) => (JSON.parse(post.tagsJson) as string[]).includes(parsed.data.tag))
     : posts;
 
+  const thumbnailIds = filteredPosts.map((p) => p.thumbnailMediaId).filter(Boolean) as string[];
+  const thumbnails = thumbnailIds.length > 0
+    ? await prisma.media.findMany({ where: { id: { in: thumbnailIds }, deletedAt: null }, select: { id: true, url: true, alt: true } })
+    : [];
+  const thumbnailMap = new Map(thumbnails.map((t) => [t.id, t]));
+
   return res.json({
-    data: filteredPosts.map((post) => ({
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      excerpt: post.excerpt,
-      category: post.category,
-      tags: JSON.parse(post.tagsJson) as string[],
-      authors: serializeAuthors(post),
-      readTimeMinutes: post.readTimeMinutes,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
-      userProfile: post.authorName
-        ? {
-            fullName: post.authorName,
-            profilePic: post.authorProfilePic
-          }
-        : null
-    })),
+    data: filteredPosts.map((post) => {
+      const thumb = post.thumbnailMediaId ? thumbnailMap.get(post.thumbnailMediaId) : null;
+      return {
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        excerpt: post.excerpt,
+        category: post.category,
+        tags: JSON.parse(post.tagsJson) as string[],
+        thumbnail: thumb ? { url: thumb.url, alt: thumb.alt } : null,
+        authors: serializeAuthors(post),
+        readTimeMinutes: post.readTimeMinutes,
+        publishedAt: post.publishedAt,
+        updatedAt: post.updatedAt
+      };
+    }),
     pagination: {
       page: parsed.data.page,
       limit: parsed.data.limit
@@ -215,6 +220,10 @@ publicRouter.get("/v1/projects/:projectSlug/posts/:postSlug", async (req, res) =
     return sendError(res, 404, "Post not found.");
   }
 
+  const thumbnail = post.thumbnailMediaId
+    ? await prisma.media.findFirst({ where: { id: post.thumbnailMediaId, deletedAt: null }, select: { url: true, alt: true } })
+    : null;
+
   return res.json({
     post: {
       id: post.id,
@@ -224,16 +233,11 @@ publicRouter.get("/v1/projects/:projectSlug/posts/:postSlug", async (req, res) =
       content: post.content,
       category: post.category,
       tags: JSON.parse(post.tagsJson) as string[],
+      thumbnail: thumbnail ? { url: thumbnail.url, alt: thumbnail.alt } : null,
       authors: serializeAuthors(post),
       readTimeMinutes: post.readTimeMinutes,
       publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
-      userProfile: post.authorName
-        ? {
-            fullName: post.authorName,
-            profilePic: post.authorProfilePic
-          }
-        : null
+      updatedAt: post.updatedAt
     }
   });
 });
