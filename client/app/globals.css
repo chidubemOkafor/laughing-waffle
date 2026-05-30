@@ -302,7 +302,7 @@ html.dark input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):no
 html.dark select,
 html.dark textarea {
   background-color: #1a1d26;
-  color: #101318;
+  color: #e9eaec;
   border-color: rgb(var(--color-cloud));
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRef, useState } from "react";
 import { useProjects } from "@/components/dashboard/project-context";
 import { PostEditor } from "@/components/dashboard/post-editor";
 import { API_URL } from "@/lib/api";
@@ -46,6 +46,7 @@ export default function NewPostPage() {
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<"draft" | "publish" | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function handleTitleChange(value: string) {
     setTitle(value);
@@ -92,11 +93,10 @@ export default function NewPostPage() {
     return media?.url ?? null;
   }
 
-  async function submitPost(event: FormEvent<HTMLFormElement>, intent: "draft" | "publish") {
-    event.preventDefault();
+  async function submitPost(intent: "draft" | "publish") {
     setError("");
     setSaving(intent);
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(formRef.current!);
     const nextStatus = intent === "publish" ? "published" : status;
 
     try {
@@ -135,10 +135,9 @@ export default function NewPostPage() {
   return (
     <main className="px-4 py-6 sm:px-6 lg:px-8">
       <form
+        ref={formRef}
         className="mx-auto max-w-7xl space-y-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-        }}
+        onSubmit={(e) => e.preventDefault()}
       >
         <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
@@ -154,7 +153,7 @@ export default function NewPostPage() {
               type="button"
               className="h-10 rounded-lg border border-cloud bg-white px-4 text-sm font-semibold text-ink transition hover:border-slate/40 disabled:cursor-not-allowed disabled:opacity-70"
               disabled={Boolean(saving)}
-              onClick={(e) => submitPost(e as unknown as FormEvent<HTMLFormElement>, "draft")}
+              onClick={() => submitPost("draft")}
             >
               {saving === "draft" ? "Saving..." : "Save draft"}
             </button>
@@ -162,7 +161,7 @@ export default function NewPostPage() {
               type="button"
               className="h-10 rounded-lg bg-coral px-4 text-sm font-semibold text-white transition hover:bg-[#ef5a49] disabled:cursor-not-allowed disabled:opacity-70"
               disabled={Boolean(saving)}
-              onClick={(e) => submitPost(e as unknown as FormEvent<HTMLFormElement>, "publish")}
+              onClick={() => submitPost("publish")}
             >
               {saving === "publish" ? "Publishing..." : "Publish"}
             </button>
