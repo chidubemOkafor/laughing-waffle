@@ -67,11 +67,12 @@ const createApiKeySchema = z.object({
     .array(
       z.enum([
         "content:read",
-        "content:create"
+        "content:write",
+        "content:delete"
       ])
     )
     .min(1)
-    .max(1)
+    .max(3)
     .optional()
     .default(["content:read"]),
   expiresInDays: z.number().int().positive().max(365).optional().default(90)

@@ -57,12 +57,28 @@ const createPostResponseExample = `{
     "title": "Guest post from your app",
     "slug": "guest-post-from-your-app",
     "status": "draft",
-    "userProfile": {
-      "fullName": "Ada Lovelace",
-      "profilePic": "https://example.com/ada.jpg"
-    },
+    "authors": [{ "name": "Ada Lovelace", "profilePic": "https://example.com/ada.jpg" }],
+    "readTimeMinutes": 1,
     "createdAt": "2026-05-18T10:30:00.000Z"
   }
+}`;
+
+const updatePostResponseExample = `{
+  "post": {
+    "id": "post_123",
+    "title": "Updated title",
+    "slug": "updated-title",
+    "status": "published",
+    "authors": [{ "name": "Ada Lovelace", "profilePic": "https://example.com/ada.jpg" }],
+    "readTimeMinutes": 3,
+    "updatedAt": "2026-05-18T12:00:00.000Z"
+  }
+}`;
+
+const deletePostResponseExample = `{
+  "deleted": true,
+  "id": "post_123",
+  "slug": "guest-post-from-your-app"
 }`;
 
 function CodeBlock({ label, code }: { label: string; code: string }) {
@@ -105,7 +121,7 @@ const data = await response.json();`;
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    Authorization: "Bearer YOUR_CREATE_ONLY_API_KEY"
+    Authorization: "Bearer YOUR_WRITE_API_KEY"
   },
   body: JSON.stringify({
     title: "Guest post from your app",
@@ -115,28 +131,54 @@ const data = await response.json();`;
     status: "draft",
     category: "Community",
     tags: ["guest", "community"],
-    userProfile: {
-      fullName: "Ada Lovelace",
-      profilePic: "https://example.com/ada.jpg"
-    }
+    authorName: "Ada Lovelace",
+    authorProfilePic: "https://example.com/ada.jpg"
   })
 });
 
 const data = await response.json();`;
   const createPostCurlExample = `curl "${createEndpoint}" \\
   -X POST \\
-  -H "Authorization: Bearer YOUR_CREATE_ONLY_API_KEY" \\
+  -H "Authorization: Bearer YOUR_WRITE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "title": "Guest post from your app",
     "slug": "guest-post-from-your-app",
     "content": "Post body content goes here.",
     "status": "draft",
-    "userProfile": {
-      "fullName": "Ada Lovelace",
-      "profilePic": "https://example.com/ada.jpg"
-    }
+    "authorName": "Ada Lovelace",
+    "authorProfilePic": "https://example.com/ada.jpg"
   }'`;
+  const updateEndpoint = `${baseUrl}/api/v1/projects/${activeProject.slug ?? activeProject.id}/posts/guest-post-from-your-app`;
+  const updatePostFetchExample = `const response = await fetch("${updateEndpoint}", {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer YOUR_WRITE_API_KEY"
+  },
+  body: JSON.stringify({
+    title: "Updated title",
+    status: "published"
+  })
+});
+
+const data = await response.json();`;
+  const updatePostCurlExample = `curl "${updateEndpoint}" \\
+  -X PATCH \\
+  -H "Authorization: Bearer YOUR_WRITE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "title": "Updated title", "status": "published" }'`;
+  const deletePostFetchExample = `const response = await fetch("${updateEndpoint}", {
+  method: "DELETE",
+  headers: {
+    Authorization: "Bearer YOUR_DELETE_ONLY_API_KEY"
+  }
+});
+
+const data = await response.json();`;
+  const deletePostCurlExample = `curl "${updateEndpoint}" \\
+  -X DELETE \\
+  -H "Authorization: Bearer YOUR_DELETE_ONLY_API_KEY"`;
 
   return (
     <main className="overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8">
@@ -214,10 +256,9 @@ const data = await response.json();`;
                 POST {createEndpoint}
               </div>
               <p className="mt-3 text-sm leading-6 text-slate">
-                This endpoint only accepts API keys whose only scope is{" "}
-                <span className="font-mono text-xs">content:create</span>. Keys
-                with read, draft, admin, or mixed scopes are rejected for this
-                endpoint.
+                This endpoint requires a key with the{" "}
+                <span className="font-mono text-xs">content:write</span> scope.
+                A full-access key also works.
               </p>
             </section>
 
@@ -233,13 +274,11 @@ const data = await response.json();`;
                   backend service creating drafts.
                 </p>
                 <p>
-                  The API key must be a create-only key. In the API key screen,
-                  choose the{" "}
-                  <span className="font-semibold text-ink">
-                    Create posts only
-                  </span>{" "}
-                  preset, or manually select only{" "}
-                  <span className="font-mono text-xs">content:create</span>.
+                  The API key must have the{" "}
+                  <span className="font-mono text-xs">content:write</span> scope.
+                  In the API key screen, choose the{" "}
+                  <span className="font-semibold text-ink">Write only</span>{" "}
+                  preset, or tick <span className="font-mono text-xs">content:write</span> manually.
                 </p>
                 <div className="rounded-lg border border-cloud bg-paper p-3">
                   <p className="font-semibold text-ink">Required fields</p>
@@ -352,6 +391,34 @@ const data = await response.json();`;
               label="Create post response"
               code={createPostResponseExample}
             />
+
+            <section className="rounded-lg border border-cloud bg-white p-4 shadow-sm">
+              <h3 className="text-base font-semibold text-ink">Update post endpoint</h3>
+              <div className="mt-4 max-w-full overflow-x-auto whitespace-nowrap rounded-lg border border-cloud bg-paper p-3 font-mono text-sm text-ink">
+                PATCH {updateEndpoint}
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate">
+                Update any fields of an existing post by slug. All fields are optional — only the ones you send are changed. Requires a key with the <span className="font-mono text-xs">content:write</span> scope.
+              </p>
+            </section>
+
+            <CodeBlock label="Update post with JavaScript" code={updatePostFetchExample} />
+            <CodeBlock label="Update post with cURL" code={updatePostCurlExample} />
+            <CodeBlock label="Update post response" code={updatePostResponseExample} />
+
+            <section className="rounded-lg border border-cloud bg-white p-4 shadow-sm">
+              <h3 className="text-base font-semibold text-ink">Delete post endpoint</h3>
+              <div className="mt-4 max-w-full overflow-x-auto whitespace-nowrap rounded-lg border border-cloud bg-paper p-3 font-mono text-sm text-ink">
+                DELETE {updateEndpoint}
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate">
+                Permanently removes a post by slug. Requires a key with the <span className="font-mono text-xs">content:delete</span> scope.
+              </p>
+            </section>
+
+            <CodeBlock label="Delete post with JavaScript" code={deletePostFetchExample} />
+            <CodeBlock label="Delete post with cURL" code={deletePostCurlExample} />
+            <CodeBlock label="Delete post response" code={deletePostResponseExample} />
           </div>
 
           <aside className="min-w-0 space-y-6">
@@ -370,8 +437,8 @@ const data = await response.json();`;
                   bundles.
                 </p>
                 <p>
-                  For external post creation, generate a key with only the
-                  `content:create` scope.
+                  For external post creation or updates, generate a key with the
+                  <span className="font-mono text-xs"> content:write</span> scope.
                 </p>
               </div>
             </section>

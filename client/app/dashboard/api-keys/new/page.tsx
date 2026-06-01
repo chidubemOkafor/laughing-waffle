@@ -9,15 +9,18 @@ const permissionGroups = [
   {
     title: "Content",
     permissions: [
-      { label: "Read published posts", value: "content:read" },
-      { label: "Create posts only", value: "content:create" }
+      { label: "Read posts", value: "content:read" },
+      { label: "Write posts (create & update)", value: "content:write" },
+      { label: "Delete posts", value: "content:delete" }
     ]
   }
 ];
 
 const presets = [
-  { label: "Public delivery", scopes: ["content:read"] },
-  { label: "Create posts only", scopes: ["content:create"] }
+  { label: "Read only", scopes: ["content:read"] },
+  { label: "Write only", scopes: ["content:write"] },
+  { label: "Delete only", scopes: ["content:delete"] },
+  { label: "Full access", scopes: ["content:read", "content:write", "content:delete"] }
 ];
 
 function parseExpiration(value: string) {
@@ -33,7 +36,9 @@ export default function NewApiKeyPage() {
   const [loading, setLoading] = useState(false);
 
   function toggleScope(scope: string) {
-    setSelectedScopes([scope]);
+    setSelectedScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -177,8 +182,7 @@ export default function NewApiKeyPage() {
                         <label key={permission.value} className="flex items-start gap-2 text-sm text-slate">
                           <input
                             className="mt-0.5 h-4 w-4 rounded border-cloud text-coral focus:ring-coral"
-                            type="radio"
-                            name="scope"
+                            type="checkbox"
                             checked={selectedScopes.includes(permission.value)}
                             onChange={() => toggleScope(permission.value)}
                           />

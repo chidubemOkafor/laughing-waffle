@@ -11,6 +11,24 @@ const publicPostsQuerySchema = z.object({
   tag: z.string().trim().max(40).optional().default("")
 });
 
+const updatePublicPostSchema = z.object({
+  title: z.string().trim().min(2).max(160).optional(),
+  slug: z
+    .string()
+    .trim()
+    .min(2)
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.")
+    .optional(),
+  excerpt: z.string().trim().max(500).optional(),
+  content: z.string().max(100000).optional(),
+  status: z.enum(["draft", "review", "scheduled", "published"]).optional(),
+  category: z.string().trim().max(80).optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  authorName: z.string().trim().max(120).optional(),
+  authorProfilePic: z.string().trim().url().optional().nullable()
+});
+
 const createPublicPostSchema = z.object({
   title: z.string().trim().min(2).max(160),
   slug: z
@@ -109,8 +127,8 @@ async function getReadOnlyApiKey(req: Request, res: Response) {
 
   const scopes = parseScopes(apiKey.scopesJson);
 
-  if (scopes.length !== 1 || scopes[0] !== "content:read") {
-    sendError(res, 403, "This endpoint requires a read-only API key.");
+  if (!scopes.includes("content:read")) {
+    sendError(res, 403, "This endpoint requires a key with the content:read scope.");
     return null;
   }
 
@@ -259,8 +277,8 @@ publicRouter.post("/v1/projects/:projectSlug/posts", async (req, res) => {
 
   const scopes = parseScopes(apiKey.scopesJson);
 
-  if (scopes.length !== 1 || scopes[0] !== "content:create") {
-    return sendError(res, 403, "This endpoint requires a create-only API key.");
+  if (!scopes.includes("content:write")) {
+    return sendError(res, 403, "This endpoint requires a key with the content:write scope.");
   }
 
   const parsed = createPublicPostSchema.safeParse(req.body);
@@ -306,13 +324,94 @@ publicRouter.post("/v1/projects/:projectSlug/posts", async (req, res) => {
       status: post.status,
       authors: serializeAuthors(post),
       readTimeMinutes: post.readTimeMinutes,
-      userProfile: post.authorName
-        ? {
-            fullName: post.authorName,
-            profilePic: post.authorProfilePic
-          }
-        : null,
       createdAt: post.createdAt
     }
   });
+});
+
+// PATCH /api/v1/projects/:projectSlug/posts/:slug
+publicRouter.patch("/projects/:projectSlug/posts/:slug", async (req: Request, res: Response) => {
+  const token = getBearerToken(req.headers.authorization);
+  if (!token) return sendError(res, 401, "Invalid or missing API key.");
+
+  const apiKey = await getApiKeyForProject(token, String(req.params.projectSlug));
+  if (!apiKey) return sendError(res, 401, "Invalid or missing API key.");
+
+  trackApiRequest(req, res, apiKey);
+
+  const scopes = parseScopes(apiKey.scopesJson);
+  if (!scopes.includes("content:write")) {
+    return sendError(res, 403, "This endpoint requires a key with the content:write scope.");
+  }
+
+  const parsed = updatePublicPostSchema.safeParse(req.body);
+  if (!parsed.success) return sendValidationError(res, parsed.error);
+
+  const existing = await prisma.post.findFirst({
+    where: { projectId: apiKey.projectId, slug: String(req.params.slug), deletedAt: null }
+  });
+  if (!existing) return sendError(res, 404, "Post not found.");
+
+  if (parsed.data.slug && parsed.data.slug !== existing.slug) {
+    const conflict = await prisma.post.findFirst({
+      where: { projectId: apiKey.projectId, slug: parsed.data.slug, deletedAt: null }
+    });
+    if (conflict) return sendError(res, 409, "A post with this slug already exists.");
+  }
+
+  const content = parsed.data.content ?? existing.content;
+  const post = await prisma.post.update({
+    where: { id: existing.id },
+    data: {
+      ...(parsed.data.title !== undefined && { title: parsed.data.title }),
+      ...(parsed.data.slug !== undefined && { slug: parsed.data.slug }),
+      ...(parsed.data.excerpt !== undefined && { excerpt: parsed.data.excerpt || null }),
+      ...(parsed.data.content !== undefined && { content, readTimeMinutes: calculateReadTimeMinutes(content) }),
+      ...(parsed.data.status !== undefined && {
+        status: parsed.data.status,
+        publishedAt: parsed.data.status === "published" && !existing.publishedAt ? new Date() : existing.publishedAt
+      }),
+      ...(parsed.data.category !== undefined && { category: parsed.data.category || null }),
+      ...(parsed.data.tags !== undefined && { tagsJson: JSON.stringify(parsed.data.tags) }),
+      ...(parsed.data.authorName !== undefined && { authorName: parsed.data.authorName || null }),
+      ...(parsed.data.authorProfilePic !== undefined && { authorProfilePic: parsed.data.authorProfilePic ?? null })
+    }
+  });
+
+  return res.json({
+    post: {
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
+      status: post.status,
+      authors: serializeAuthors(post),
+      readTimeMinutes: post.readTimeMinutes,
+      updatedAt: post.updatedAt
+    }
+  });
+});
+
+// DELETE /api/v1/projects/:projectSlug/posts/:slug
+publicRouter.delete("/projects/:projectSlug/posts/:slug", async (req: Request, res: Response) => {
+  const token = getBearerToken(req.headers.authorization);
+  if (!token) return sendError(res, 401, "Invalid or missing API key.");
+
+  const apiKey = await getApiKeyForProject(token, String(req.params.projectSlug));
+  if (!apiKey) return sendError(res, 401, "Invalid or missing API key.");
+
+  trackApiRequest(req, res, apiKey);
+
+  const scopes = parseScopes(apiKey.scopesJson);
+  if (!scopes.includes("content:delete")) {
+    return sendError(res, 403, "This endpoint requires a key with the content:delete scope.");
+  }
+
+  const existing = await prisma.post.findFirst({
+    where: { projectId: apiKey.projectId, slug: String(req.params.slug), deletedAt: null }
+  });
+  if (!existing) return sendError(res, 404, "Post not found.");
+
+  await prisma.post.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
+
+  return res.json({ deleted: true, id: existing.id, slug: existing.slug });
 });
