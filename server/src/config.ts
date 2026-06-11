@@ -10,9 +10,15 @@ const envPath = [resolve(currentDir, "../.env"), resolve(currentDir, "../../.env
 
 loadEnv(envPath ? { path: envPath } : undefined);
 
+const clientOrigins = (process.env.CLIENT_ORIGIN ?? "http://127.0.0.1:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
-  clientOrigin: process.env.CLIENT_ORIGIN ?? "http://127.0.0.1:3000",
+  clientOrigins,
+  primaryClientOrigin: clientOrigins[0],
   sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "laughingwaffle_session",
   sessionTtlDays: Number(process.env.SESSION_TTL_DAYS ?? 30),
   resendApiKey: process.env.RESEND_API_KEY ?? "",

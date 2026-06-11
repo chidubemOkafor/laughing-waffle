@@ -8,7 +8,7 @@ import { publicRouter } from "./routes/public.js";
 
 const app = express();
 const allowedOrigins = new Set([
-  config.clientOrigin,
+  ...config.clientOrigins,
   "http://localhost:3000",
   "http://127.0.0.1:3000"
 ]);

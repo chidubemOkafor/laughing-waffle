@@ -6,7 +6,7 @@ import { createToken, hashToken } from "../utils/crypto.js";
 export async function createAndSendPasswordReset(user: { id: string; email: string; name: string }) {
   const token = createToken();
   const expiresAt = new Date(Date.now() + config.passwordResetTtlMinutes * 60 * 1000);
-  const resetUrl = new URL("/reset-password", config.clientOrigin);
+  const resetUrl = new URL("/reset-password", config.primaryClientOrigin);
   resetUrl.searchParams.set("token", token);
 
   await prisma.passwordResetToken.updateMany({
