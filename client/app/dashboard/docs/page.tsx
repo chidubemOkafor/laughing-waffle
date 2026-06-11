@@ -81,6 +81,16 @@ const deletePostResponseExample = `{
   "slug": "guest-post-from-your-app"
 }`;
 
+const uploadImageResponseExample = `{
+  "media": {
+    "id": "media_123",
+    "url": "https://res.cloudinary.com/your-cloud/image/upload/v1/laughingwaffle/your-project/cover.png",
+    "alt": "Cover image",
+    "width": 1200,
+    "height": 630
+  }
+}`;
+
 function CodeBlock({ label, code }: { label: string; code: string }) {
   return (
     <section className="min-w-0 rounded-lg border border-cloud bg-white shadow-sm">
@@ -149,6 +159,31 @@ const data = await response.json();`;
     "authorName": "Ada Lovelace",
     "authorProfilePic": "https://example.com/ada.jpg"
   }'`;
+  const mediaEndpoint = `${baseUrl}/api/v1/projects/${activeProject.slug ?? activeProject.id}/media`;
+  const uploadImageFetchExample = `// 1. Upload the image
+const form = new FormData();
+form.append("file", fileBlob, "cover.png"); // a File or Blob
+form.append("usage", "thumbnail");          // "thumbnail" or "post-image"
+form.append("alt", "Cover image");
+
+const upload = await fetch("${mediaEndpoint}", {
+  method: "POST",
+  headers: {
+    // Do NOT set Content-Type — the browser adds the multipart boundary
+    Authorization: "Bearer YOUR_WRITE_API_KEY"
+  },
+  body: form
+});
+
+const { media } = await upload.json();
+// media.id  -> pass as thumbnailMediaId when creating a post
+// media.url -> embed directly inside the post content`;
+  const uploadImageCurlExample = `curl "${mediaEndpoint}" \\
+  -X POST \\
+  -H "Authorization: Bearer YOUR_WRITE_API_KEY" \\
+  -F "file=@./cover.png" \\
+  -F "usage=thumbnail" \\
+  -F "alt=Cover image"`;
   const updateEndpoint = `${baseUrl}/api/v1/projects/${activeProject.slug ?? activeProject.id}/posts/guest-post-from-your-app`;
   const updatePostFetchExample = `const response = await fetch("${updateEndpoint}", {
   method: "PATCH",
@@ -337,6 +372,15 @@ const data = await response.json();`;
                         external user.
                       </p>
                     </div>
+                    <div>
+                      <span className="font-mono text-xs text-ink">
+                        thumbnailMediaId
+                      </span>
+                      <p>
+                        The <span className="font-mono text-xs">id</span> returned
+                        by the upload image endpoint, to set the post thumbnail.
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <div className="rounded-lg border border-cloud bg-paper p-3">
@@ -390,6 +434,97 @@ const data = await response.json();`;
             <CodeBlock
               label="Create post response"
               code={createPostResponseExample}
+            />
+
+            <section className="rounded-lg border border-cloud bg-white p-4 shadow-sm">
+              <h3 className="text-base font-semibold text-ink">
+                Upload image endpoint
+              </h3>
+              <div className="mt-4 max-w-full overflow-x-auto whitespace-nowrap rounded-lg border border-cloud bg-paper p-3 font-mono text-sm text-ink">
+                POST {mediaEndpoint}
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate">
+                Upload an image to use as a post{" "}
+                <span className="font-semibold text-ink">thumbnail</span> or
+                inside a post{"'"}s body. Send the file as{" "}
+                <span className="font-mono text-xs">multipart/form-data</span>.
+                Requires a key with the{" "}
+                <span className="font-mono text-xs">content:write</span> scope.
+              </p>
+            </section>
+
+            <section className="rounded-lg border border-cloud bg-white p-4 shadow-sm">
+              <h3 className="text-base font-semibold text-ink">
+                How image upload works
+              </h3>
+              <div className="mt-4 space-y-4 text-sm leading-6 text-slate">
+                <p>
+                  Upload the image first, then reference the returned{" "}
+                  <span className="font-mono text-xs">media.id</span> as{" "}
+                  <span className="font-mono text-xs">thumbnailMediaId</span> when
+                  you create or update a post, or drop the returned{" "}
+                  <span className="font-mono text-xs">media.url</span> straight
+                  into your post <span className="font-mono text-xs">content</span>.
+                </p>
+                <div className="rounded-lg border border-cloud bg-paper p-3">
+                  <p className="font-semibold text-ink">Form fields</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <span className="font-mono text-xs text-ink">file</span>
+                      <p>
+                        Required. The image file. Must be an image type, up to
+                        5MB.
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-mono text-xs text-ink">usage</span>
+                      <p>
+                        Optional. <span className="font-mono text-xs">thumbnail</span>{" "}
+                        or <span className="font-mono text-xs">post-image</span>.
+                        Defaults to post-image.
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-mono text-xs text-ink">alt</span>
+                      <p>Optional. Alt text stored with the image.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-cloud bg-paper p-3">
+                  <p className="font-semibold text-ink">Important responses</p>
+                  <div className="mt-3 space-y-2">
+                    <p>
+                      <span className="font-mono text-xs text-ink">201</span>{" "}
+                      Image uploaded. Returns the media object.
+                    </p>
+                    <p>
+                      <span className="font-mono text-xs text-ink">400</span> No
+                      file sent, or the file is not an image.
+                    </p>
+                    <p>
+                      <span className="font-mono text-xs text-ink">401</span>{" "}
+                      Missing or invalid API key.
+                    </p>
+                    <p>
+                      <span className="font-mono text-xs text-ink">403</span> Key
+                      is missing the content:write scope.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <CodeBlock
+              label="Upload image with JavaScript"
+              code={uploadImageFetchExample}
+            />
+            <CodeBlock
+              label="Upload image with cURL"
+              code={uploadImageCurlExample}
+            />
+            <CodeBlock
+              label="Upload image response"
+              code={uploadImageResponseExample}
             />
 
             <section className="rounded-lg border border-cloud bg-white p-4 shadow-sm">

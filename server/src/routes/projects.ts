@@ -1,13 +1,12 @@
 import { Router } from "express";
 import multer from "multer";
-import crypto from "node:crypto";
 import { z } from "zod";
 import type { Project } from "@prisma/client";
 import { serializeProject } from "../auth/serialize.js";
 import { getSessionFromRequest } from "../auth/session.js";
 import { getBillingPeriodStart, normalizePlan, planLimits } from "../billing/plans.js";
-import { config } from "../config.js";
 import { prisma } from "../db.js";
+import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { createApiSecret, createPublicId, hashToken } from "../utils/crypto.js";
 import { calculateReadTimeMinutes, serializeAuthors } from "../utils/content.js";
 import { sendError, sendValidationError } from "../utils/http.js";
@@ -77,17 +76,6 @@ const createApiKeySchema = z.object({
     .default(["content:read"]),
   expiresInDays: z.number().int().positive().max(365).optional().default(90)
 });
-
-type CloudinaryUploadResponse = {
-  secure_url?: string;
-  public_id?: string;
-  bytes?: number;
-  width?: number;
-  height?: number;
-  error?: {
-    message?: string;
-  };
-};
 
 function getPrimaryWorkspace(session: NonNullable<Awaited<ReturnType<typeof getSessionFromRequest>>>) {
   return session.user.memberships[0]?.workspace;
@@ -256,46 +244,6 @@ function serializePost(post: {
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     updated: formatUpdatedAt(post.updatedAt)
-  };
-}
-
-async function uploadToCloudinary(file: Express.Multer.File, folder: string) {
-  if (!config.cloudinaryCloudName || !config.cloudinaryApiKey || !config.cloudinaryApiSecret) {
-    throw new Error("Cloudinary is not configured.");
-  }
-
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signatureBase = `folder=${folder}&timestamp=${timestamp}${config.cloudinaryApiSecret}`;
-  const signature = crypto.createHash("sha1").update(signatureBase).digest("hex");
-  const formData = new FormData();
-
-  formData.set("file", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }), file.originalname);
-  formData.set("api_key", config.cloudinaryApiKey);
-  formData.set("timestamp", String(timestamp));
-  formData.set("folder", folder);
-  formData.set("signature", signature);
-
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudinaryCloudName}/image/upload`, {
-    method: "POST",
-    body: formData
-  });
-
-  const data = (await response.json().catch(() => null)) as CloudinaryUploadResponse | null;
-
-  if (!response.ok) {
-    throw new Error(data?.error?.message ?? "Unable to upload image to Cloudinary.");
-  }
-
-  if (!data?.secure_url || !data.public_id) {
-    throw new Error("Cloudinary did not return an uploaded image URL.");
-  }
-
-  return {
-    url: data.secure_url,
-    path: data.public_id,
-    bytes: typeof data.bytes === "number" ? data.bytes : file.size,
-    width: typeof data.width === "number" ? data.width : null,
-    height: typeof data.height === "number" ? data.height : null
   };
 }
 

@@ -1,9 +1,16 @@
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { calculateReadTimeMinutes, serializeAuthors } from "../utils/content.js";
 import { hashToken } from "../utils/crypto.js";
 import { sendError, sendValidationError } from "../utils/http.js";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 const publicPostsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional().default(10),
@@ -26,7 +33,8 @@ const updatePublicPostSchema = z.object({
   category: z.string().trim().max(80).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
   authorName: z.string().trim().max(120).optional(),
-  authorProfilePic: z.string().trim().url().optional().nullable()
+  authorProfilePic: z.string().trim().url().optional().nullable(),
+  thumbnailMediaId: z.string().trim().min(1).optional().nullable()
 });
 
 const createPublicPostSchema = z.object({
@@ -42,6 +50,7 @@ const createPublicPostSchema = z.object({
   status: z.enum(["draft", "review", "scheduled", "published"]).optional().default("draft"),
   category: z.string().trim().max(80).optional().default(""),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional().default([]),
+  thumbnailMediaId: z.string().trim().min(1).optional(),
   userProfile: z
     .object({
       fullName: z.string().trim().min(1).max(120),
@@ -133,6 +142,33 @@ async function getReadOnlyApiKey(req: Request, res: Response) {
   }
 
   trackApiRequest(req, res, apiKey);
+
+  return apiKey;
+}
+
+async function getWriteApiKey(req: Request, res: Response) {
+  const token = getBearerToken(req.header("authorization"));
+
+  if (!token) {
+    sendError(res, 401, "Invalid or missing API key.");
+    return null;
+  }
+
+  const apiKey = await getApiKeyForProject(token, String(req.params.projectSlug));
+
+  if (!apiKey) {
+    sendError(res, 401, "Invalid or missing API key.");
+    return null;
+  }
+
+  trackApiRequest(req, res, apiKey);
+
+  const scopes = parseScopes(apiKey.scopesJson);
+
+  if (!scopes.includes("content:write")) {
+    sendError(res, 403, "This endpoint requires a key with the content:write scope.");
+    return null;
+  }
 
   return apiKey;
 }
@@ -299,6 +335,20 @@ publicRouter.post("/v1/projects/:projectSlug/posts", async (req, res) => {
     return sendError(res, 409, "A post with this slug already exists in this project.");
   }
 
+  let thumbnailMediaId: string | null = null;
+
+  if (parsed.data.thumbnailMediaId) {
+    const media = await prisma.media.findFirst({
+      where: { id: parsed.data.thumbnailMediaId, projectId: apiKey.projectId, deletedAt: null }
+    });
+
+    if (!media) {
+      return sendError(res, 400, "thumbnailMediaId does not reference an image in this project.");
+    }
+
+    thumbnailMediaId = media.id;
+  }
+
   const post = await prisma.post.create({
     data: {
       projectId: apiKey.projectId,
@@ -312,6 +362,7 @@ publicRouter.post("/v1/projects/:projectSlug/posts", async (req, res) => {
       authorProfilePic: parsed.data.userProfile?.profilePic ?? null,
       readTimeMinutes: calculateReadTimeMinutes(parsed.data.content),
       tagsJson: JSON.stringify(parsed.data.tags),
+      thumbnailMediaId,
       publishedAt: parsed.data.status === "published" ? new Date() : null
     }
   });
@@ -327,6 +378,53 @@ publicRouter.post("/v1/projects/:projectSlug/posts", async (req, res) => {
       createdAt: post.createdAt
     }
   });
+});
+
+// POST /api/v1/projects/:projectSlug/media — upload an image (thumbnail or in-post image)
+publicRouter.post("/v1/projects/:projectSlug/media", upload.single("file"), async (req, res) => {
+  const apiKey = await getWriteApiKey(req, res);
+
+  if (!apiKey) {
+    return;
+  }
+
+  if (!req.file) {
+    return sendError(res, 400, "No image file uploaded. Send the image as multipart/form-data under the 'file' field.");
+  }
+
+  if (!req.file.mimetype.startsWith("image/")) {
+    return sendError(res, 400, "Only image uploads are supported.");
+  }
+
+  const usage = req.body.usage === "thumbnail" ? "thumbnail" : "post-image";
+
+  try {
+    const uploaded = await uploadToCloudinary(req.file, `laughingwaffle/${apiKey.project.slug}`);
+    const media = await prisma.media.create({
+      data: {
+        projectId: apiKey.projectId,
+        usage,
+        url: uploaded.url,
+        path: uploaded.path,
+        alt: req.body.alt ? String(req.body.alt) : null,
+        bytes: uploaded.bytes,
+        width: uploaded.width,
+        height: uploaded.height
+      }
+    });
+
+    return res.status(201).json({
+      media: {
+        id: media.id,
+        url: media.url,
+        alt: media.alt,
+        width: media.width,
+        height: media.height
+      }
+    });
+  } catch (error) {
+    return sendError(res, 500, error instanceof Error ? error.message : "Unable to upload image.");
+  }
 });
 
 // PATCH /api/v1/projects/:projectSlug/posts/:slug
@@ -359,6 +457,13 @@ publicRouter.patch("/projects/:projectSlug/posts/:slug", async (req: Request, re
     if (conflict) return sendError(res, 409, "A post with this slug already exists.");
   }
 
+  if (parsed.data.thumbnailMediaId) {
+    const media = await prisma.media.findFirst({
+      where: { id: parsed.data.thumbnailMediaId, projectId: apiKey.projectId, deletedAt: null }
+    });
+    if (!media) return sendError(res, 400, "thumbnailMediaId does not reference an image in this project.");
+  }
+
   const content = parsed.data.content ?? existing.content;
   const post = await prisma.post.update({
     where: { id: existing.id },
@@ -374,7 +479,8 @@ publicRouter.patch("/projects/:projectSlug/posts/:slug", async (req: Request, re
       ...(parsed.data.category !== undefined && { category: parsed.data.category || null }),
       ...(parsed.data.tags !== undefined && { tagsJson: JSON.stringify(parsed.data.tags) }),
       ...(parsed.data.authorName !== undefined && { authorName: parsed.data.authorName || null }),
-      ...(parsed.data.authorProfilePic !== undefined && { authorProfilePic: parsed.data.authorProfilePic ?? null })
+      ...(parsed.data.authorProfilePic !== undefined && { authorProfilePic: parsed.data.authorProfilePic ?? null }),
+      ...(parsed.data.thumbnailMediaId !== undefined && { thumbnailMediaId: parsed.data.thumbnailMediaId ?? null })
     }
   });
 
