@@ -65,7 +65,7 @@ export function LoginForm() {
       </label>
 
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-ink">Password</span>
+        <span className="text-sm font-medium text-ink" >Password</span>
         <input
           className="h-11 w-full rounded-lg border border-cloud bg-white px-3 text-sm outline-none transition placeholder:text-slate/60 focus:border-sky focus:ring-4 focus:ring-[rgba(91,141,239,0.12)]"
           type="password"

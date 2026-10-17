@@ -26,6 +26,12 @@ export const config = {
   emailSendTimeoutMs: Number(process.env.EMAIL_SEND_TIMEOUT_MS ?? 10000),
   emailVerificationTtlMinutes: Number(process.env.EMAIL_VERIFICATION_TTL_MINUTES ?? 10),
   passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 30),
+  apiRateLimitWindowMs: Number(process.env.API_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000),
+  apiRateLimitMax: Number(process.env.API_RATE_LIMIT_MAX ?? 300),
+  authRateLimitWindowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000),
+  authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 20),
+  emailRateLimitWindowMs: Number(process.env.EMAIL_RATE_LIMIT_WINDOW_MS ?? 60 * 60 * 1000),
+  emailRateLimitMax: Number(process.env.EMAIL_RATE_LIMIT_MAX ?? 5),
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY ?? "",
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? ""

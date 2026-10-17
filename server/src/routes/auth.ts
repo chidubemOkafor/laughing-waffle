@@ -15,6 +15,7 @@ import {
 } from "../auth/session.js";
 import { sendError, sendValidationError } from "../utils/http.js";
 import { hashToken } from "../utils/crypto.js";
+import { emailRateLimiter, loginRateLimiter } from "../middleware/rate-limit.js";
 
 const signupSchema = z.object({
   name: z.string().trim().min(2),
@@ -87,7 +88,7 @@ async function getOrCreateWorkspace(user: { id: string; name: string }) {
 
 export const authRouter = Router();
 
-authRouter.post("/signup", async (req, res) => {
+authRouter.post("/signup", emailRateLimiter, async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -195,7 +196,7 @@ authRouter.post("/verify-email", async (req, res) => {
   });
 });
 
-authRouter.post("/resend-verification-code", async (req, res) => {
+authRouter.post("/resend-verification-code", emailRateLimiter, async (req, res) => {
   const parsed = resendVerificationSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -221,7 +222,7 @@ authRouter.post("/resend-verification-code", async (req, res) => {
   return res.json(response);
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginRateLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -254,7 +255,7 @@ authRouter.post("/login", async (req, res) => {
   });
 });
 
-authRouter.post("/forgot-password", async (req, res) => {
+authRouter.post("/forgot-password", emailRateLimiter, async (req, res) => {
   const parsed = forgotPasswordSchema.safeParse(req.body);
 
   if (!parsed.success) {

@@ -2,11 +2,13 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
+import { apiRateLimiter } from "./middleware/rate-limit.js";
 import { authRouter } from "./routes/auth.js";
 import { projectsRouter } from "./routes/projects.js";
 import { publicRouter } from "./routes/public.js";
 
 const app = express();
+app.set("trust proxy", 1);
 const allowedOrigins = new Set([
   ...config.clientOrigins,
   "http://localhost:3000",
@@ -32,6 +34,8 @@ app.use(cookieParser());
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+app.use("/api", apiRateLimiter);
 
 app.use(["/api/auth", "/api/projects"], (_req, res, next) => {
   res.set("Cache-Control", "no-store");
